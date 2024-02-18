@@ -1,3 +1,7 @@
+/* BY: Jumps Are Op. (jumpsareop@gmail.com)
+ * LICENSE: GPLv3-or-later
+ */
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
