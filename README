@@ -1,0 +1,9 @@
+SXMag - Simple X Magnifier
+
+Why nobody did ever write this before?
+
+Dependencies:
+	- Xlib and X11 headers.
+	- A working ANSI-C (C89) compiler.
+
+See config.h for configuration.
