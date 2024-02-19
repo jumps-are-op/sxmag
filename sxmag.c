@@ -11,6 +11,8 @@
 #include <X11/Xatom.h>
 #include <X11/keysym.h>
 
+#define LEN(x) (sizeof(x)/sizeof(x[0]))
+
 static Display *dpy;
 static int scr;
 static GC gc;
@@ -19,6 +21,24 @@ static Atom wmdeletewin;
 static double cx = 0, cy = 0, lastx, lasty, curx = 0, cury = 0;
 static long w, h, ch, cw;
 static bool started = false, holding = false, running;
+
+union Arg {
+	float f;
+	int i;
+	unsigned u;
+};
+
+struct KeyBind {
+	void(*f)(union Arg);
+	union Arg arg;
+	unsigned int state;
+	KeySym key;
+};
+
+static void scale(union Arg arg);
+static void movex(union Arg arg);
+static void movey(union Arg arg);
+static void stop(union Arg arg);
 
 #include "config.h"
 
@@ -38,8 +58,8 @@ static void(*eventhandler[LASTEvent])(XEvent*) = {
 	[KeyPress] = keys
 };
 
-int main(int argc, char *argv[]){
-	long x, y, lastcx = cx, lastcy = cy, lasts = scale;
+int main(void){
+	long x, y, lastcx = cx, lastcy = cy, lasts = zoom;
 	Pixel *in, *pout;
 	XImage *out;
 	XEvent ev;
@@ -60,7 +80,7 @@ int main(int argc, char *argv[]){
 		for(x = 0; x < w; x++)
 			in[y*w + x] = pout[y*w + x];
 
-	magnify(in, pout, cx, cy, scale);
+	magnify(in, pout, cx, cy, zoom);
 
 	XGetWindowAttributes(dpy, win, &attr);
 	XPutImage(dpy, win, gc, out, 0, 0, 0, 0, attr.width, attr.height);
@@ -71,11 +91,11 @@ int main(int argc, char *argv[]){
 
 	running = true;
 	while(running){
-		if(cx != lastcx || cy != lastcy || lasts != scale)
-			magnify(in, pout, cx, cy, scale);
+		if(cx != lastcx || cy != lastcy || lasts != zoom)
+			magnify(in, pout, cx, cy, zoom);
 		lastcx = cx;
 		lastcy = cy;
-		lasts = scale;
+		lasts = zoom;
 		XGetWindowAttributes(dpy, win, &attr);
 		XPutImage(
 			dpy, win, gc, out, 0, 0, 0, 0,
@@ -94,6 +114,24 @@ int main(int argc, char *argv[]){
 	XDestroyWindow(dpy, win);
 	XCloseDisplay(dpy);
 	return 0;
+}
+
+static void scale(union Arg arg){
+	zoom += arg.f;
+	if(zoom < 0)
+		zoom = 0.1f;
+}
+
+static void movex(union Arg arg){
+	cx += arg.i;
+}
+
+static void movey(union Arg arg){
+	cy += arg.i;
+}
+
+static void stop(union Arg arg){
+	running = false;
 }
 
 static void XInit(void){
@@ -175,8 +213,8 @@ static void motion(XEvent *e){
 		return;
 	}
 
-	cx += (lastx - curx)/scale;
-	cy += (lasty - cury)/scale;
+	cx += (lastx - curx)/zoom;
+	cy += (lasty - cury)/zoom;
 	lastx = curx;
 	lasty = cury;
 }
@@ -192,19 +230,19 @@ static void button(XEvent *e){
 			running = false;
 			return;
 		case Button4:
-			c = MAGSTEP/(scale*(scale+MAGSTEP));
+			c = MAGSTEP/(zoom*(zoom+MAGSTEP));
 			cx += (curx-cw)*c;
 			cy += (cury-ch)*c;
-			scale += MAGSTEP;
+			zoom += MAGSTEP;
 			return;
 		case Button5:
-			if(scale <= MAGSTEP+0.1f){
-				scale = 0.1f;
+			if(zoom <= MAGSTEP+0.1f){
+				zoom = 0.1f;
 			}else{
-				c = MAGSTEP/(scale*(scale-MAGSTEP));
+				c = MAGSTEP/(zoom*(zoom-MAGSTEP));
 				cx -= (curx-cw)*c;
 				cy -= (cury-ch)*c;
-				scale -= MAGSTEP;
+				zoom -= MAGSTEP;
 			}
 			return;
 	}
@@ -216,33 +254,17 @@ static void unbutton(XEvent *e){
 }
 
 static void keys(XEvent *e){
-	int s;
+	size_t i;
+	unsigned int state = e->xkey.state;
+
 	KeySym keysym = XLookupKeysym(&e->xkey, 0);
 	if(!keysym)
 		return;
 
-	if(e->xkey.state & ShiftMask)
-		s = SHIFTSPEED;
-	else
-		s = SPEED;
-
-	if(e->xkey.state & ControlMask) switch(keysym){
-		case XK_Up: scale += s*MAGSTEP; return;
-		case XK_Down:
-			scale -= s*MAGSTEP;
-			if(scale < 0)
-				scale = MAGSTEP;
-			return;
+	for(i = 0; i < LEN(keybinds); i++){
+		if(keybinds[i].key == keysym && keybinds[i].state == state){
+			keybinds[i].f(keybinds[i].arg);
+			break;
+		}
 	}
-
-	switch(keysym){
-	case XK_Shift_L: case XK_Shift_R:
-	case XK_Control_L: case XK_Control_R: return;
-
-	case XK_Right: cx += s/scale; return;
-	case XK_Left: cx -= s/scale; return;
-	case XK_Up: cy -= s/scale; return;
-	case XK_Down: cy += s/scale; return;
-	}
-	running = false;
 }
