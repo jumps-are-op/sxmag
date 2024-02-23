@@ -76,6 +76,11 @@ int main(void){
 	out = XGetImage(dpy, root, 0, 0, w, h, AllPlanes, ZPixmap);
 	pout = (Pixel*)(out->data);
 	in = malloc(w * h * sizeof(Pixel));
+	if(!in){
+		perror("malloc");
+		return 1;
+	}
+
 	for(y = 0; y < h; y++)
 		for(x = 0; x < w; x++)
 			in[y*w + x] = pout[y*w + x];
